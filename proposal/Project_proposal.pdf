@@ -1,0 +1,12 @@
+Sebastian Zapata
+Non-Profit Organization Map
+GITHUB REPOSITORY: https://github.com/sebz04/SQL_Final_Project
+JOB DESCRIPTION:
+I chose the Data Reporter role at ProPublica, a nonprofit newsroom known for exposing truths through data. This role aligns with my goal of combining journalism and data analytics to tell stories that reveal patterns and hold institutions accountable.
+PROBLEM:
+ProPublica’s Nonprofit Explorer is great for individual searches, but readers don’t get the full picture of how nonprofits operate across regions in major trends. I want to create an interactive map showing average executive salaries by state (along with other key metrics), while also adding deeper info about each organization. This helps uncover where nonprofits may be overpaying executives or underinvesting in mission work—key issues for public interest reporting. Furthermore, it can paint a picture of the non-profit reality in the United States, possibly digging up an undervalued or overshadowed story from this extensive dataset. I definitely want to center on nonprofit values and wages across different districts, states, and counties. 
+DATA SOURCES:
+API: ProPublica Nonprofit Explorer API — provides IRS Form 990 data including executive salaries and locations. Web Scrape: Charity Navigator — to gather mission statements, ratings, or leadership bios for context. 
+These sources support analysis of spending trends and give a richer view of nonprofit behavior, exactly the kind of work ProPublica reporters do.
+SOLUTION:
+I’ll build a SQL pipeline to clean, group, and analyze salary data by region. Using CTEs, joins, and window functions, I’ll calculate salary averages and outliers, linking this to scraped data like ratings or mission focus. The result will be an interactive map showing nonprofit spending trends across the U.S., letting users filter by state or nonprofit type. Even if an interactive map is not done, I can at least make dashboards and be able to find aggregated data based on location. 
