@@ -100,28 +100,14 @@ print(f"📥 Retrieved {len(einList)} EINs from Postgres.")
 
 
 # %%
-# Testing with 100 LA nonprofits!
+einList = [941340523, 941196203, 941156365]
 
-einList = [
-    954444787, 823166229, 953273046, 952906949, 264286940, 954841936, 452390782, 863753196, 882495552, 912171518,
-    953613187, 953895589, 833722687, 870709457, 800011266, 954120544, 883448557, 831017038, 813068173, 853467492,
-    954266571, 931802179, 951690977, 953033333, 951696734, 953567895, 952408623, 952635019, 952096402, 950948160,
-    954002138, 454998717, 953134049, 954862553, 953909218, 954700442, 953718119, 201819852, 951691288, 950951420,
-    921018736, 833172348, 204637089, 954481955, 61692670, 205142259, 455434395, 262358338, 953921204, 812571475,
-    952825348, 853685167, 237208448, 954547514, 952988883, 852023078, 954264361, 204555989, 10761875, 956048122,
-    954174562, 956072782, 950734614, 475136561, 954374643, 474391440, 851912511, 953423223, 954589251, 460575192,
-    475314677, 950947510, 953287926, 813986670, 953980495, 953471695, 861404052, 952701113, 953302452, 954379560,
-    273332652, 833460767, 954412529, 851979554, 474482497, 270579751, 954694129, 320498349, 934493920, 861620575,
-    270732846, 472185490, 842988087, 822069289, 461118356, 872882952, 463886104, 274434017, 850868163, 825105055
-]
-  # these are confirmed valid
-  #ein list from the database and previous API call
-
+# %%
+#Begin sifting through each EIN
 for ein in einList:
     print(ein)
 
-#ein = 951643334
-#ein2 = 142007220
+
     url = f"https://projects.propublica.org/nonprofits/organizations/{ein}"
     # Make a GET request to the URL
     response = requests.get(url)
@@ -147,22 +133,28 @@ for ein in einList:
     all_filings = soup.find_all('section', class_='single-filing-period')
 
     # Step 2: Grab the first one — ProPublica orders them latest first
-    if all_filings:
-        first_section = all_filings[0]
-        id_attr = first_section.get('id', '')
+    all_filings = soup.find_all('section', class_='single-filing-period')
+    filing_block = None
+    filing_year = 'N/A'
 
+    for section in all_filings:
+        id_attr = section.get('id', '')
         try:
-            filing_year = int(id_attr.replace('filing', ''))
+            year = int(id_attr.replace('filing', ''))
         except ValueError:
-            filing_year = 'N/A'
+            continue
 
-        organization_detail['year'].append(filing_year)
-        filing_block = first_section
-        soup2 = BeautifulSoup(str(filing_block), 'html.parser')
+        # Parse this block
+        temp_soup = BeautifulSoup(str(section), 'html.parser')
+        revenue_check = temp_soup.select_one('.row-revenue__number')
+        
+        if revenue_check and revenue_check.text.strip() != '':
+            filing_block = section
+            filing_year = year
+            break  # ✅ Found a valid filing, break out
 
-    else:
-        organization_detail['year'].append('N/A')
-        filing_block = None
+    organization_detail['year'].append(filing_year)
+
 
     # --- Extracting Financial Data --- 
 
@@ -248,15 +240,69 @@ for ein in einList:
     organization_detail['other_revenue'].append(get_rev('Other Revenue', 'amount'))
     organization_detail['other_revenue_perc'].append(get_rev('Other Revenue', 'percentage'))
 
-# %%
-organization_detail
+    # --- Compensation Data ---
+
+    print(soup2.prettify())
+
+    comp_table = soup2.find('table', class_='employees')
+
+    if comp_table:
+        rows = comp_table.find_all('tr', class_='employee-row')
+    
+        compensation_detail['ein'].append(ein)
+
+        # Get only the first 3 employee rows
+        for i in range(3):
+            if i < len(rows):
+                cols = rows[i].find_all('td')
+
+                # Name and title
+                name_title = cols[0].text.strip().split('\n')
+                name = name_title[0].strip()
+                title = cols[0].find('span')
+                title = title.text.strip('()') if title else 'N/A'
+
+                # Compensation
+                base_comp = cols[1].text.strip() if len(cols) > 1 else 'N/A'
+
+                
+
+                if i == 0:
+                    compensation_detail['first_employee_name'].append(name)
+                    compensation_detail['first_employee_title'].append(title)
+                    compensation_detail['first_employee_compensation'].append(base_comp)
+                elif i == 1:
+                    compensation_detail['second_employee_name'].append(name)
+                    compensation_detail['second_employee_title'].append(title)
+                    compensation_detail['second_employee_compensation'].append(base_comp)
+                elif i == 2:
+                    compensation_detail['third_employee_name'].append(name)
+                    compensation_detail['third_employee_title'].append(title)
+                    compensation_detail['third_employee_compensation'].append(base_comp)
+    else:
+        print("❌ Compensation table NOT found.")
 
 # %%
-for key, value in organization_detail.items():
-    print(f"{key}: {len(value)}")
+# debugging
+#comp_table = soup2.select_one('table.employees tbody')
+#print("✅ Compensation table found!" if comp_table else "❌ Compensation table NOT found!")
+# %%
+
+
+# %%
+#If need to check the data
+#organization_detail
+#compensation_detail
+# %%
+#Was having techinical issues with lengths of lists
+#for key, value in organization_detail.items():
+#    print(f"{key}: {len(value)}")
 # %%
 dataFrame = pd.DataFrame(organization_detail)
 dataFrame
+
+compensation_df = pd.DataFrame(compensation_detail)
+compensation_df
 #There are some issues with the data collected
 #i intend on cleaning it in Python
 #However, I want to demonstrate that I can load it into Postgres so I will do it in the following lines of code
@@ -266,7 +312,10 @@ dataFrame
 
 # ✅ Define table name and schema (optional)
 table_name = 'nonprofit_financials'
+comp_table = 'org_comp'
 schema_name = 'sql_project'  # change this if you're using a custom schema
+
+# ✅ Check if the table already exists``
 
 # ✅ Send DataFrame to Postgres
 dataFrame.to_sql(
@@ -278,8 +327,15 @@ dataFrame.to_sql(
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
 
+compensation_df.to_sql(
+    name=comp_table,
+    con=pg_engine,
+    schema=schema_name,
+    if_exists='replace',  # or 'append' if you're adding to an existing table
+    index=False
+)
 
-
+print(f"✅ DataFrame successfully loaded into table '{schema_name}.{comp_table}'")
 
 
 # %%
