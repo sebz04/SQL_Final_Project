@@ -91,7 +91,7 @@ load_dotenv()
 
 # %%
 #Gather ein from Postgres database
-query = "SELECT ein FROM sql_project.nonprofits_100"
+query = "SELECT ein FROM sql_project.nonprofits_100 LIMIT 100"
 ein_df = pd.read_sql(query, con=pg_engine)
 
 # ✅ Convert EINs to a flat list
@@ -100,7 +100,6 @@ print(f"📥 Retrieved {len(einList)} EINs from Postgres.")
 
 
 # %%
-einList = [941340523, 941196203, 941156365]
 
 # %%
 #Begin sifting through each EIN
@@ -242,7 +241,7 @@ for ein in einList:
 
     # --- Compensation Data ---
 
-    print(soup2.prettify())
+    #print(soup2.prettify())
 
     comp_table = soup2.find('table', class_='employees')
 
@@ -256,7 +255,7 @@ for ein in einList:
             if i < len(rows):
                 cols = rows[i].find_all('td')
 
-                # Name and title
+                # Extract name and title
                 name_title = cols[0].text.strip().split('\n')
                 name = name_title[0].strip()
                 title = cols[0].find('span')
@@ -264,23 +263,37 @@ for ein in einList:
 
                 # Compensation
                 base_comp = cols[1].text.strip() if len(cols) > 1 else 'N/A'
+            else:
+                # Fill with N/A when not enough employees
+                name = 'N/A'
+                title = 'N/A'
+                base_comp = 'N/A'
 
-                
-
-                if i == 0:
-                    compensation_detail['first_employee_name'].append(name)
-                    compensation_detail['first_employee_title'].append(title)
-                    compensation_detail['first_employee_compensation'].append(base_comp)
-                elif i == 1:
-                    compensation_detail['second_employee_name'].append(name)
-                    compensation_detail['second_employee_title'].append(title)
-                    compensation_detail['second_employee_compensation'].append(base_comp)
-                elif i == 2:
-                    compensation_detail['third_employee_name'].append(name)
-                    compensation_detail['third_employee_title'].append(title)
-                    compensation_detail['third_employee_compensation'].append(base_comp)
+            if i == 0:
+                compensation_detail['first_employee_name'].append(name)
+                compensation_detail['first_employee_title'].append(title)
+                compensation_detail['first_employee_compensation'].append(base_comp)
+            elif i == 1:
+                compensation_detail['second_employee_name'].append(name)
+                compensation_detail['second_employee_title'].append(title)
+                compensation_detail['second_employee_compensation'].append(base_comp)
+            elif i == 2:
+                compensation_detail['third_employee_name'].append(name)
+                compensation_detail['third_employee_title'].append(title)
+                compensation_detail['third_employee_compensation'].append(base_comp)
     else:
         print("❌ Compensation table NOT found.")
+        compensation_detail['ein'].append(ein)
+        compensation_detail['first_employee_name'].append('N/A')
+        compensation_detail['first_employee_title'].append('N/A')
+        compensation_detail['first_employee_compensation'].append('N/A')
+        compensation_detail['second_employee_name'].append('N/A')
+        compensation_detail['second_employee_title'].append('N/A')
+        compensation_detail['second_employee_compensation'].append('N/A')
+        compensation_detail['third_employee_name'].append('N/A')
+        compensation_detail['third_employee_title'].append('N/A')
+        compensation_detail['third_employee_compensation'].append('N/A')
+
 
 # %%
 # debugging
@@ -295,11 +308,16 @@ for ein in einList:
 #compensation_detail
 # %%
 #Was having techinical issues with lengths of lists
-#for key, value in organization_detail.items():
-#    print(f"{key}: {len(value)}")
+for key, value in organization_detail.items():
+    print(f"{key}: {len(value)}")
+
+for key, value in compensation_detail.items():
+    print(f"{key}: {len(value)}")
 # %%
 dataFrame = pd.DataFrame(organization_detail)
 dataFrame
+
+# %%
 
 compensation_df = pd.DataFrame(compensation_detail)
 compensation_df
@@ -313,7 +331,7 @@ compensation_df
 # ✅ Define table name and schema (optional)
 table_name = 'nonprofit_financials'
 comp_table = 'org_comp'
-schema_name = 'sql_project'  # change this if you're using a custom schema
+schema_name = 'raw'  # change this if you're using a custom schema
 
 # ✅ Check if the table already exists``
 
