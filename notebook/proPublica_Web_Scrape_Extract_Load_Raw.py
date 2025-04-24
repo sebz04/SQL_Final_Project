@@ -73,6 +73,31 @@ compensation_detail = {
         "third_employee_compensation": [],
 }
 
+# %%
+#Setting up Postgres connection
+
+pg_user = os.environ['PG_USER']
+pg_password = os.environ['PG_PASSWORD']
+pg_host = os.environ['PG_HOST']
+pg_db = os.environ['PG_DB']
+pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
+pg_engine = create_engine(pg_conn_str)
+
+
+# %% 
+# Save the DataFrame to PostgreSQL
+# ✅ Optional: load environment variables
+load_dotenv()
+
+# %%
+#Gather ein from Postgres database
+query = "SELECT ein FROM sql_project.nonprofits_100"
+ein_df = pd.read_sql(query, con=pg_engine)
+
+# ✅ Convert EINs to a flat list
+einList = ein_df['ein'].dropna().astype(int).tolist()
+print(f"📥 Retrieved {len(einList)} EINs from Postgres.")
+
 
 # %%
 # Testing with 100 LA nonprofits!
@@ -237,18 +262,7 @@ dataFrame
 #However, I want to demonstrate that I can load it into Postgres so I will do it in the following lines of code
 # %%
 
-pg_user = os.environ['PG_USER']
-pg_password = os.environ['PG_PASSWORD']
-pg_host = os.environ['PG_HOST']
-pg_db = os.environ['PG_DB']
-pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
-pg_engine = create_engine(pg_conn_str)
 
-
-# %% 
-# Save the DataFrame to PostgreSQL
-# ✅ Optional: load environment variables
-load_dotenv()
 
 # ✅ Define table name and schema (optional)
 table_name = 'nonprofit_financials'
