@@ -24,284 +24,75 @@ from urllib.parse import urlencode  # Function to encode query parameters in URL
 import os
 from dotenv import load_dotenv
 import psycopg2
-
-
-# %%
-search_url = 'https://projects.propublica.org/nonprofits/api/v2'
-get_method = '/search.json?'
-get_org_method = '/organizations/'
-
-# Step 1: Define query parameters in a dictionary
-params = {
-    'q': 'ProPublica',
-    #'state[id]': 'MA',  # Uncomment to filter by state
-    #'c_code[id]': 3     # Uncomment to filter by 501(c)(3)
-}
-
-# Step 2: Encode them into a URL-friendly string
-query_string = urlencode(params)
-
-# Step 3: Combine with endpoint
-response = requests.get(f'{search_url}{get_method}{query_string}')
-
+from urllib.parse import urlencode
 
 # %%
 
-data = response.json()
-data
-# %%
+
+# -- GOING through each ntee id -- 
+# ----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
+#----------------------------------------------------------------
 
 
-
-organization_search = {
-    'ein': [],
-    'name': [],
-    'city': [],
-    'state': [],
-    'score': []
-}
-
-# %%
-
-for org in data['organizations']:
-    organization_search['ein'].append(org['ein'])
-    organization_search['name'].append(org['name'])
-    organization_search['city'].append(org['city'])
-    organization_search['state'].append(org['state'])
-    organization_search['score'].append(org['score'])
-
-
-# %%
-organization_search
-
-# %%
-data_frame = pd.DataFrame(organization_search)
-data_frame 
-# %%
-
-
-for ein in organization_search['ein']:
-    print(f'Fetching data for EIN: {ein}')
-    # Step 4: Make a GET request to the API for each EIN
-    org_details = requests.get(f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein}.json').json()
-    for filing in org_details['filings_with_data']:
-        print({
-            'year': filing['tax_prd_yr'],
-            'totrevenue': filing.get('totrevenue'),
-            'totfuncexpns': filing.get('totfuncexpns'),
-            'totassetsend': filing.get('totassetsend'),
-            'totliabend': filing.get('totliabend'),
-            'pct_compnsatncurrofcr': filing.get('pct_compnsatncurrofcr')
-        })
-# %%
-
-organization_info = {
-    'ein': [],
-    'name': [],
-    'address': [],
-    'city': [],
-    'state': [],
-    'zipcode': [],
-    'subseccd': [],
-    'ntee_code': [],
-}
-
-#Parameter to find city
-params = {
-    'q': '+Los+Angeles',
-    'state[id]': 'CA'
-}
-
-for page_num in range(0, 400):  # Up to 10,000 results (400 pages * 25 per page)
-    params['page'] = page_num
-    query_string = urlencode(params)
-    response = requests.get(f'{search_url}{get_method}{query_string}')
-    
-    if response.status_code != 200:
-        break  # stop if something goes wrong
-    
-    data = response.json()
-    
-    for org in data['organizations']:
-        if org['city'].lower() == 'los angeles':
-            organization_search['ein'].append(org['ein'])
-            organization_search['name'].append(org['name'])
-            organization_search['city'].append(org['city'])
-            organization_search['state'].append(org['state'])
-            organization_search['score'].append(org['score'])
-
-organization_search
-
-# %%
-
-for ein2 in organization_search['ein']:
-    print(f'Fetching data for EIN: {ein2}')
-    response2 = requests.get(f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein2}.json')
-    data2 = response2.json()
-    print(data2['organization'])
-    #for i in data2['organization']:
-       # print(i)
-    #print(data2['organization'].keys()) 
-    print("---------")
-    organization_info['ein'].append(data2['organization']['ein'])
-    organization_info['name'].append(data2['organization']['name']) 
-    organization_info['address'].append(data2['organization']['address'])
-    organization_info['city'].append(data2['organization']['city'])
-    organization_info['state'].append(data2['organization']['state'])
-    organization_info['zipcode'].append(data2['organization']['zipcode'])
-    organization_info['subseccd'].append(data2['organization']['subsection_code'])
-    organization_info['ntee_code'].append(data2['organization']['ntee_code'])
-    #organization_info['updated'].append(data2['organization'].get('updated_at'))
-
-organization_info
-    
-
-# %%
-data_frame = pd.DataFrame(organization_info)
-data_frame
-
-
-
-
-
-
-
-# %%
-#Finding All organizations in Los Angeles
 
 search_url = 'https://projects.propublica.org/nonprofits/api/v2'
 get_method = '/search.json?'
 get_org_method = '/organizations/'
 
-# Step 1: Define query parameters for Los Angeles in a dictionary
-#Parameter to find city
-params = {
+# %%
+# Go through each ntee id 
+c_code_list = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '23', '25', '26', '27', '28', '92']	
+
+ein_list = []  
+
+for c_c in c_code_list:
+
+    print(c_c)
+    
+    params = {
     'q': '+Los+Angeles',
-    'state[id]': 'CA'
-}
+    'state[id]': 'CA',
+    'c_code[id]': c_c
+    }
 
 # LIST to store EINs
-ein_list = [] 
-
-# %%
-
-# Loop through up to 400 pages (25 results per page = 10,000 total)
-for page in range(400):
-    #Flips through each page
-    print(f'Fetching page {page}...')
-    params['page'] = page
-    query_string = urlencode(params)
-    response = requests.get(f'{search_url}{get_method}{query_string}')
-    #gets response from API on specific page
-
-    if response.status_code != 200:
-        print(f'Stopped at page {page} due to error: {response.status_code}')
-        break
-    #checks if response is valid
     
-    data = response.json()
-    orgs = data.get('organizations', [])
-    #gets the organizations from the response in the form of a list 
-    
-    if not orgs:
-        print(f'No more results on page {page}. Ending loop.')
-        break
-    #checks if there are no more results on the page
-    
-    for org in orgs:
-        if org.get('city', '').lower() == 'los angeles':
-            ein_list.append(org['ein'])
-            #adds the EIN to the list if the city is Los Angeles
-    print(f'Found {len(ein_list)} EINs so far.')
 
-# %%
-print(f"✅ Total EINs collected: {len(ein_list)}")
-print(ein_list[:5])  # Print first 5 EINs to see if came out good
+    # Loop through up to 400 pages (25 results per page = 10,000 total)
+    for page in range(400):
+        print(f'Fetching page {page}...')
+        params['page'] = page
+        query_string = urlencode(params)
+        response = requests.get(f'{search_url}{get_method}{query_string}')
 
-# %%
-#Now that I have the EINs of organizations in Los Angeles,
-#I can use the EINs to get more information about each organization
-# Step 2: Define the API endpoint and parameters
+        if response.status_code != 200:
+            print(f'Stopped at page {page} due to error: {response.status_code}')
+            break
 
-organization_info = {
-    'ein': [],
-    'name': [],
-    'address': [],
-    'city': [],
-    'state': [],
-    'zipcode': [],
-    'subseccd': [],
-    'ntee_code': [],
-}
+        data = response.json()
+        orgs = data.get('organizations', [])
 
-# Step 3: Make a GET request to the API for each EIN
+        if not orgs:
+            print(f'No more results on page {page}. Ending loop.')
+            break
 
-for ein in ein_list:
-    print(f'Fetching data for EIN: {ein}')
-    response2 = requests.get(f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein}.json')
-    # call to get the organization object
-    data2 = response2.json() 
-    print("---------")
-    organization_info['ein'].append(data2['organization']['ein'])
-    organization_info['name'].append(data2['organization']['name']) 
-    organization_info['address'].append(data2['organization']['address'])
-    organization_info['city'].append(data2['organization']['city'])
-    organization_info['state'].append(data2['organization']['state'])
-    organization_info['zipcode'].append(data2['organization']['zipcode'])
-    organization_info['subseccd'].append(data2['organization']['subsection_code'])
-    organization_info['ntee_code'].append(data2['organization']['ntee_code'])
+        for org in orgs:
+            if org.get('city', '').lower() == 'los angeles':
+                ein_list.append(org['ein'])
+            #if len(ein_list) >= 1000:
+                #break  # Stop once we hit 100 EINs
 
-
-
-# %%
-# Save into dataframe 
-data_frame = pd.DataFrame(organization_info)
-data_frame
-
-# %%
-
-##FOR FIRST 100 ORGS##
-
-search_url = 'https://projects.propublica.org/nonprofits/api/v2'
-get_method = '/search.json?'
-get_org_method = '/organizations/'
-
-# Step 1: Define query parameters for Los Angeles in a dictionary
-params = {
-    'q': '+Los+Angeles',
-    'state[id]': 'CA'
-}
-
-# LIST to store EINs
-ein_list = [] 
-
-# Loop through up to 400 pages (25 results per page = 10,000 total)
-for page in range(400):
-    print(f'Fetching page {page}...')
-    params['page'] = page
-    query_string = urlencode(params)
-    response = requests.get(f'{search_url}{get_method}{query_string}')
-
-    if response.status_code != 200:
-        print(f'Stopped at page {page} due to error: {response.status_code}')
-        break
-
-    data = response.json()
-    orgs = data.get('organizations', [])
-
-    if not orgs:
-        print(f'No more results on page {page}. Ending loop.')
-        break
-
-    for org in orgs:
-        if org.get('city', '').lower() == 'los angeles':
-            ein_list.append(org['ein'])
-        if len(ein_list) >= 100:
-            break  # Stop once we hit 100 EINs
-
-    print(f'Found {len(ein_list)} EINs so far.')
-    if len(ein_list) >= 100:
-        break  # Stop paginating once we have 100 EINs
+        print(f'Found {len(ein_list)} EINs so far.')
+        #if len(ein_list) >= 1000:
+            #break  # Stop paginating once we have 100 EINs
 
 # %%
 print(f"✅ Total EINs collected: {len(ein_list)}")
@@ -349,6 +140,9 @@ for ein in ein_list:
 # Save into dataframe 
 data_frame = pd.DataFrame(organization_info)
 data_frame
+
+
+
 # %%
 # Put into Postgres server 
 
@@ -358,6 +152,7 @@ pg_host = os.environ['PG_HOST']
 pg_db = os.environ['PG_DB']
 pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
 pg_engine = create_engine(pg_conn_str)
+
 
 
 # %% 
@@ -378,6 +173,28 @@ data_frame.to_sql(
     index=False
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -418,13 +235,13 @@ for ein in ein_list[:5]:  # First 5 EINs
 financials_df = pd.DataFrame(financial_data)
 
 # Preview result
-financials_df
-
+financials_df.head()
 ### NEXT STEPS ###
 # Make these iterate through Zip Code so 
 # it doesn't stop at 10,000 orgs --> adds more
 # Possibly more efficient too, less brute force?
 
+# %%
 
 
 
@@ -443,14 +260,4 @@ financials_df
 
 
 
-
-
-
-
-
-
-
-
-
-
-
+# %%
