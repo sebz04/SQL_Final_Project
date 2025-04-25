@@ -91,7 +91,7 @@ load_dotenv()
 
 # %%
 #Gather ein from Postgres database
-query = "SELECT ein FROM sql_project.nonprofits_100 LIMIT 100"
+query = "SELECT ein FROM sql_project.nonprofits_100"
 ein_df = pd.read_sql(query, con=pg_engine)
 
 # ✅ Convert EINs to a flat list
