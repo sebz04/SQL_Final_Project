@@ -306,8 +306,8 @@ pg_engine = create_engine(pg_conn_str)
 load_dotenv()
 
 # ✅ Define table name and schema (optional)
-table_name = 'nonprofits_100'
-schema_name = 'sql_project'  # change this if you're using a custom schema
+table_name = 'nonprofits'
+schema_name = 'raw'  # change this if you're using a custom schema
 
 # ✅ Send DataFrame to Postgres
 data_frame.to_sql(
