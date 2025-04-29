@@ -1,0 +1,35 @@
+name: Nonprofit Cleaning and Staging Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+env:
+  PG_USER: ${{ secrets.PG_USER }}
+  PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+  PG_HOST: ${{ secrets.PG_HOST }}
+  PG_DB: ${{ secrets.PG_DB }}
+
+jobs:
+  cleaning_staging_job:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run API Cleaning Script
+      run: python notebooks/nonprofit_api_clean_staging.py
+
+    - name: Run Web Scrape Cleaning Script
+      run: python notebooks/nonprofit_webscrape_clean_staging.py

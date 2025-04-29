@@ -45,7 +45,7 @@ nonprofit_cleaned.to_sql(
     index=False
 )
 
-print(f"✅ Cleaned nonprofit data written to sql_project.staging_nonprofits_100")
+print(f"✅ Cleaned nonprofit data written to staging.staging_nonprofits_100")
 
 # ------------------------------------------------------
 
@@ -76,4 +76,4 @@ financials_cleaned.to_sql(
     index=False
 )
 
-print(f"✅ Cleaned financial data written to sql_project.staging_financial_history")
+print(f"✅ Cleaned financial data written to staging.staging_financial_history")
