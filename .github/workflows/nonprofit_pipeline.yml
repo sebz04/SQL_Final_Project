@@ -1,0 +1,39 @@
+name: Run Nonprofit Extract and Load to Raw Schema
+
+on:
+    schedule:
+       - cron: '0 0 * * *
+
+
+env:
+  PG_USER: ${{ secrets.PG_USER }}
+  PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+  PG_HOST: ${{ secrets.PG_HOST }}
+  PG_DB: ${{ secrets.PG_DB }}
+
+jobs:
+  extract-load:
+    name: Extract and Load Nonprofit Data
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run ProPublica API Extraction
+      run: |
+        python scripts/propublica_api_extract.py
+
+    - name: Run Web Scraping Extraction
+      run: |
+        python scripts/web_scraping_extract.py
