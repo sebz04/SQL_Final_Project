@@ -103,51 +103,77 @@ get_org_method = '/organizations/'
 # Go through each ntee id 
 c_code_list = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '23', '25', '26', '27', '28', '92']	
 
-ein_list = []  
+ntee_list = list(range(1, 11))  # NTEE major groups: 1–10
 
-for c_c in c_code_list:
-
-    print(c_c)
-    
-    params = {
-    'q': '+Los+Angeles',
-    'state[id]': 'CA',
-    'c_code[id]': c_c
-    }
-
-    # LIST to store EINs
+ein_set = set()  # Use a set to avoid duplicates
     
 
     # Loop through up to 400 pages (25 results per page = 10,000 total)
     #for page in range(400):
-    for page in range(3):
-        print(f'Fetching page {page}...')
-        params['page'] = page
-        query_string = urlencode(params)
-        response = requests.get(f'{search_url}{get_method}{query_string}')
+for c_c in c_code_list:
+    print(f"\n🔍 Searching for c_code: {c_c}")
 
-        if response.status_code != 200:
-            print(f'Stopped at page {page} due to error: {response.status_code}')
-            break
+    # If c_code is 3 (501(c)(3)), break it down further by NTEE
+    if c_c == '3':
+        for ntee in ntee_list:
+            print(f"  ➤ NTEE batch: {ntee}")
+            for page in range(4):  # Use range(400) if you're doing full batch
+                params = {
+                    'q': 'Los Angeles',
+                    'state[id]': 'CA',
+                    'c_code[id]': c_c,
+                    'ntee[id]': ntee,
+                    'page': page
+                }
+                query_string = urlencode(params)
+                response = requests.get(f'{search_url}{get_method}{query_string}')
+                
+                if response.status_code != 200:
+                    print(f'    ⚠️ Stopped at page {page} due to error: {response.status_code}')
+                    break
 
-        data = response.json()
-        orgs = data.get('organizations', [])
+                data = response.json()
+                orgs = data.get('organizations', [])
 
-        if not orgs:
-            print(f'No more results on page {page}. Ending loop.')
-            break
+                if not orgs:
+                    print(f'    ℹ️ No more results on page {page}. Ending loop.')
+                    break
 
-        for org in orgs:
-            if org.get('city', '').lower() == 'los angeles':
-                ein_list.append(org['ein'])
-            #if len(ein_list) >= 100:
-                #break  # Stop once we hit 100 EINs
+                for org in orgs:
+                    if org.get('city', '').lower() == 'los angeles':
+                        ein_set.add(org['ein'])
 
-        print(f'Found {len(ein_list)} EINs so far.')
-        if len(ein_list) >= 1000:
-            break  # Stop paginating once we have 100 EINs
+                print(f'    ✅ EINs collected so far: {len(ein_set)}')
+    else:
+        # For all other c_codes, normal loop
+        for page in range(3):
+            params = {
+                'q': 'Los Angeles',
+                'state[id]': 'CA',
+                'c_code[id]': c_c,
+                'page': page
+            }
+            query_string = urlencode(params)
+            response = requests.get(f'{search_url}{get_method}{query_string}')
 
+            if response.status_code != 200:
+                print(f'  ⚠️ Stopped at page {page} due to error: {response.status_code}')
+                break
+
+            data = response.json()
+            orgs = data.get('organizations', [])
+
+            if not orgs:
+                print(f'  ℹ️ No more results on page {page}. Ending loop.')
+                break
+
+            for org in orgs:
+                if org.get('city', '').lower() == 'los angeles':
+                    ein_set.add(org['ein'])
+
+            print(f'  ✅ EINs collected so far: {len(ein_set)}')
 # %%
+ein_list = list(ein_set)  # Convert set to list for easier handling
 print(f"✅ Total EINs collected: {len(ein_list)}")
 print(ein_list[:5])  # Print first 5 EINs to see if came out good
 
@@ -315,7 +341,9 @@ data_frame.to_sql(
     con=pg_engine,
     schema=schema_name,
     if_exists='replace',  # or 'append' if you're adding to an existing table
-    index=False
+    index=False,
+    chunksize=500,
+    method='multi'
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
  
@@ -334,9 +362,12 @@ for ein in ein_list:  # First 5 EINs
 
     org_details = response.json()
     
-    for filing in org_details.get('filings_with_data', []):
+    filings = org_details.get('filings_with_data', [])
+    filings_sorted = sorted(filings, key=lambda x: x.get('tax_prd_yr', 0), reverse=True)[:5]  # Top 5 recent
+
+    for filing in filings_sorted:
         financial_data.append({
-            'ein': ein,
+            'ein': str(ein).zfill(9),  # Ensure EIN is a string early (optional here too)
             'year': filing.get('tax_prd_yr'),
             'totrevenue': filing.get('totrevenue'),
             'totfuncexpns': filing.get('totfuncexpns'),
@@ -358,7 +389,11 @@ financials_df.to_sql(
     con=pg_engine,
     schema=schema_name,
     if_exists='replace',  # or 'append' if you're adding to an existing table
-    index=False
+    index=False,
+    chunksize=500,
+    method='multi'
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
  
+
+# %%
