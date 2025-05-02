@@ -10,72 +10,17 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy import create_engine
-import os
 from dotenv import load_dotenv
-import psycopg2
+import os
 
-# %% 
-
-#I'm using an EIN list that I already uploaded into Postgres
-#For the sake of my sleep, I'm using a set list. 
-# Hopefully, by the time you see this, I'll commit a new change where it'll use info from my Postgres database to scrape based on EIN from the database itself
-
+# Load environment variables
+load_dotenv()
 
 # %%
 
-organization_detail = {
-        "ein": [],
-        "name": [],
-        "category": [],
-        "year": [],
-        "revenue": [],
-        "expenses": [],
-        "net_income": [],
-        "net_assets": [],
-        "contributions": [],
-        "contribution_perc": [],
-        "program_service_revenue": [],
-        "program_service_revenue_perc": [],
-        "investment_income": [],
-        "investment_income_perc": [],
-        "bond_proceeds": [],
-        "bond_proceeds_perc": [],
-        "royalties": [],
-        "royalties_perc": [],
-        "rent_income": [],
-        "rent_income_perc": [],
-        "sales": [],
-        "sales_perc": [],
-        "net_inventory": [],
-        "net_inventory_perc": [],
-        "other_revenue": [],
-        "other_revenue_perc": [],
-        "executive_comp": [],
-        "executive_comp_perc": [],
-        "fundraising_fees": [],
-        "fundraising_fees_perc": [],
-        "salaries_wages": [],
-        "salaries_wages_perc": []
-    }
-
-compensation_detail = {
-        "ein": [],
-        "first_employee_name": [],
-        "first_employee_title": [],
-        "first_employee_compensation": [],
-        "second_employee_name": [],
-        "second_employee_title": [],
-        "second_employee_compensation": [],
-        "third_employee_name": [],
-        "third_employee_title": [],
-        "third_employee_compensation": [],
-}
-
-# %%
-#Setting up Postgres connection
-
+# Set up Postgres connection
 pg_user = os.environ['PG_USER']
 pg_password = os.environ['PG_PASSWORD']
 pg_host = os.environ['PG_HOST']
@@ -83,277 +28,138 @@ pg_db = os.environ['PG_DB']
 pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
 pg_engine = create_engine(pg_conn_str)
 
-
-# %% 
-# Save the DataFrame to PostgreSQL
-# ✅ Optional: load environment variables
-load_dotenv()
-
 # %%
-#Gather ein from Postgres database
-query = "SELECT ein FROM sql_project.nonprofits_100"
+
+# Load EINs from your staging table
+query = "SELECT ein FROM staging.staging_nonprofits"
 ein_df = pd.read_sql(query, con=pg_engine)
+ein_list = ein_df['ein'].dropna().astype(str).str.zfill(9).tolist()
 
-# ✅ Convert EINs to a flat list
-einList = ein_df['ein'].dropna().astype(int).tolist()
-print(f"📥 Retrieved {len(einList)} EINs from Postgres.")
+# Containers for results
+org_results = []
+comp_results = []
 
+# %%
+
+# Scraper function (1 EIN at a time)
+def scrape_ein(ein):
+    org_row = {"ein": ein}
+    comp_row = {"ein": ein}
+
+    try:
+        url = f"https://projects.propublica.org/nonprofits/organizations/{ein}"
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # --- Organization Info ---
+        name_tags = soup.select('.text-hed-900')
+        org_row['name'] = name_tags[1].text.strip() if len(name_tags) > 1 else 'N/A'
+
+        category_tags = soup.select('.ntee-category')
+        category = category_tags[0].text.strip() if category_tags else 'N/A'
+        org_row['category'] = ' '.join(category.split())
+
+        # Find latest valid filing section
+        all_filings = soup.find_all('section', class_='single-filing-period')
+        filing_block, filing_year = None, 'N/A'
+        for section in all_filings:
+            try:
+                year = int(section.get('id', '').replace('filing', ''))
+            except:
+                continue
+            temp_soup = BeautifulSoup(str(section), 'html.parser')
+            if temp_soup.select_one('.row-revenue__number'):
+                filing_block = section
+                filing_year = year
+                break
+        org_row['year'] = filing_year
+
+        # Parse the financial section
+        soup2 = BeautifulSoup(str(filing_block), 'html.parser')
+        get_text = lambda s: s.text.strip() if s else 'N/A'
+        org_row['revenue'] = get_text(soup2.select_one('.row-revenue__number'))
+
+        def extract_summary(label):
+            el = soup2.find('div', string=label)
+            return get_text(el.find_next_sibling('div')) if el else 'N/A'
+
+        org_row['expenses'] = extract_summary('Expenses')
+        org_row['net_income'] = extract_summary('Net Income')
+        org_row['net_assets'] = extract_summary('Net Assets')
+
+        # --- Compensation Info ---
+        comp_table = soup2.find('table', class_='employees')
+        if comp_table:
+            rows = comp_table.find_all('tr', class_='employee-row')
+            for i in range(3):
+                if i < len(rows):
+                    cols = rows[i].find_all('td')
+                    name = cols[0].text.strip().split('\n')[0].strip()
+                    title = cols[0].find('span')
+                    title = title.text.strip('()') if title else 'N/A'
+                    base_comp = cols[1].text.strip() if len(cols) > 1 else 'N/A'
+                else:
+                    name, title, base_comp = 'N/A', 'N/A', 'N/A'
+
+                prefix = ['first', 'second', 'third'][i]
+                comp_row[f'{prefix}_employee_name'] = name
+                comp_row[f'{prefix}_employee_title'] = title
+                comp_row[f'{prefix}_employee_compensation'] = base_comp
+        else:
+            for prefix in ['first', 'second', 'third']:
+                comp_row[f'{prefix}_employee_name'] = 'N/A'
+                comp_row[f'{prefix}_employee_title'] = 'N/A'
+                comp_row[f'{prefix}_employee_compensation'] = 'N/A'
+
+    except Exception as e:
+        org_row['error'] = str(e)
+        comp_row['error'] = str(e)
+
+    return org_row, comp_row
 
 # %%
 
-# %%
-#Begin sifting through each EIN
-for ein in einList:
-    print(ein)
-
-
-    url = f"https://projects.propublica.org/nonprofits/organizations/{ein}"
-    # Make a GET request to the URL
-    response = requests.get(url)
-    response.text
-
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(response.text, 'html.parser')
-    soup
-    
-    name_tags = soup.select('.text-hed-900')
-    name = name_tags[1].text.strip() if len(name_tags) > 1 else 'N/A'
-    organization_detail['name'].append(name)
-    organization_detail['ein'].append(ein)
-
-    category_tags = soup.select('.ntee-category')
-    category = category_tags[0].text.strip() if category_tags else 'N/A'
-    category = ' '.join(category.split())  # remove \n, \t, etc.
-    organization_detail['category'].append(category)
-    # 
-
-    # Step 1: Find all filings on record
-    #Filings based on NEWEST filing
-    all_filings = soup.find_all('section', class_='single-filing-period')
-
-    # Step 2: Grab the first one — ProPublica orders them latest first
-    all_filings = soup.find_all('section', class_='single-filing-period')
-    filing_block = None
-    filing_year = 'N/A'
-
-    for section in all_filings:
-        id_attr = section.get('id', '')
+# Run the scraping concurrently
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = {executor.submit(scrape_ein, ein): ein for ein in ein_list}
+    for future in as_completed(futures):
+        ein = futures[future]  # get EIN associated with the future
         try:
-            year = int(id_attr.replace('filing', ''))
-        except ValueError:
-            continue
-
-        # Parse this block
-        temp_soup = BeautifulSoup(str(section), 'html.parser')
-        revenue_check = temp_soup.select_one('.row-revenue__number')
-        
-        if revenue_check and revenue_check.text.strip() != '':
-            filing_block = section
-            filing_year = year
-            break  # ✅ Found a valid filing, break out
-
-    organization_detail['year'].append(filing_year)
-
-
-    # --- Extracting Financial Data --- 
-
-    soup2 = BeautifulSoup(str(filing_block), 'html.parser')
-
-    # --- Summary Financials ---
-    get_text = lambda s: s.text.strip() if s else 'N/A'
-    revenue = get_text(soup2.select_one('.row-revenue__number'))
-
-    def extract_summary(label):
-        el = soup2.find('div', string=label)
-        return get_text(el.find_next_sibling('div')) if el else 'N/A'
-
-    expenses = extract_summary('Expenses')
-    net_income = extract_summary('Net Income')
-    net_assets = extract_summary('Net Assets')
-
-    # --- Detailed Revenue Sources with Percentages ---
-    revenue_sources = {}
-    for row in soup2.select('table.revenue tbody tr'):
-        cols = row.find_all('td')
-        if len(cols) >= 3:
-            source = cols[0].text.strip()
-            amount = cols[1].text.strip()
-            perc = cols[2].text.strip().split()[-1] if cols[2].text.strip() else 'N/A'
-            revenue_sources[source] = {'amount': amount, 'percentage': perc}
-
-    expenses_dict = {}
-    for row in soup2.select('table.expenses tbody tr'):
-        cols = row.find_all('td')
-        if len(cols) >= 2:
-            label = cols[0].text.strip()
-            amount = cols[1].text.strip()
-            perc = cols[2].text.strip().split()[-1] if len(cols) > 2 and cols[2].text.strip() else 'N/A'
-            expenses_dict[label] = {'amount': amount, 'percentage': perc}
-
-    # --- Append to organization_detail ---
-
-    organization_detail['revenue'].append(revenue)
-    organization_detail['expenses'].append(expenses)
-    organization_detail['net_income'].append(net_income)
-    organization_detail['net_assets'].append(net_assets)
-
-    # Handle each known revenue source safely
-    get_rev = lambda k, f: revenue_sources.get(k, {}).get(f, 'N/A')
-
-    # --- Append to organization_detail ---
-    get_exp = lambda k, f: expenses_dict.get(k, {}).get(f, 'N/A')
-
-    organization_detail["executive_comp"].append(get_exp("Executive Compensation", "amount"))
-    organization_detail["executive_comp_perc"].append(get_exp("Executive Compensation", "percentage"))
-
-    organization_detail["fundraising_fees"].append(get_exp("Professional Fundraising Fees", "amount"))
-    organization_detail["fundraising_fees_perc"].append(get_exp("Professional Fundraising Fees", "percentage"))
-
-    organization_detail["salaries_wages"].append(get_exp("Other Salaries and Wages", "amount"))
-    organization_detail["salaries_wages_perc"].append(get_exp("Other Salaries and Wages", "percentage"))
-
-    organization_detail['contributions'].append(get_rev('Contributions', 'amount'))
-    organization_detail['contribution_perc'].append(get_rev('Contributions', 'percentage'))
-
-    organization_detail['program_service_revenue'].append(get_rev('Program Services', 'amount'))
-    organization_detail['program_service_revenue_perc'].append(get_rev('Program Services', 'percentage'))
-
-    organization_detail['investment_income'].append(get_rev('Investment Income', 'amount'))
-    organization_detail['investment_income_perc'].append(get_rev('Investment Income', 'percentage'))
-
-    organization_detail['bond_proceeds'].append(get_rev('Bond Proceeds', 'amount'))
-    organization_detail['bond_proceeds_perc'].append(get_rev('Bond Proceeds', 'percentage'))
-
-    organization_detail['royalties'].append(get_rev('Royalties', 'amount'))
-    organization_detail['royalties_perc'].append(get_rev('Royalties', 'percentage'))
-
-    organization_detail['rent_income'].append(get_rev('Rental Property Income', 'amount'))
-    organization_detail['rent_income_perc'].append(get_rev('Rental Property Income', 'percentage'))
-
-    organization_detail['sales'].append(get_rev('Sales of Assets', 'amount'))
-    organization_detail['sales_perc'].append(get_rev('Sales of Assets', 'percentage'))
-
-    organization_detail['net_inventory'].append(get_rev('Net Inventory Sales', 'amount'))
-    organization_detail['net_inventory_perc'].append(get_rev('Net Inventory Sales', 'percentage'))
-
-    organization_detail['other_revenue'].append(get_rev('Other Revenue', 'amount'))
-    organization_detail['other_revenue_perc'].append(get_rev('Other Revenue', 'percentage'))
-
-    # --- Compensation Data ---
-
-    #print(soup2.prettify())
-
-    comp_table = soup2.find('table', class_='employees')
-
-    if comp_table:
-        rows = comp_table.find_all('tr', class_='employee-row')
-    
-        compensation_detail['ein'].append(ein)
-
-        # Get only the first 3 employee rows
-        for i in range(3):
-            if i < len(rows):
-                cols = rows[i].find_all('td')
-
-                # Extract name and title
-                name_title = cols[0].text.strip().split('\n')
-                name = name_title[0].strip()
-                title = cols[0].find('span')
-                title = title.text.strip('()') if title else 'N/A'
-
-                # Compensation
-                base_comp = cols[1].text.strip() if len(cols) > 1 else 'N/A'
-            else:
-                # Fill with N/A when not enough employees
-                name = 'N/A'
-                title = 'N/A'
-                base_comp = 'N/A'
-
-            if i == 0:
-                compensation_detail['first_employee_name'].append(name)
-                compensation_detail['first_employee_title'].append(title)
-                compensation_detail['first_employee_compensation'].append(base_comp)
-            elif i == 1:
-                compensation_detail['second_employee_name'].append(name)
-                compensation_detail['second_employee_title'].append(title)
-                compensation_detail['second_employee_compensation'].append(base_comp)
-            elif i == 2:
-                compensation_detail['third_employee_name'].append(name)
-                compensation_detail['third_employee_title'].append(title)
-                compensation_detail['third_employee_compensation'].append(base_comp)
-    else:
-        print("❌ Compensation table NOT found.")
-        compensation_detail['ein'].append(ein)
-        compensation_detail['first_employee_name'].append('N/A')
-        compensation_detail['first_employee_title'].append('N/A')
-        compensation_detail['first_employee_compensation'].append('N/A')
-        compensation_detail['second_employee_name'].append('N/A')
-        compensation_detail['second_employee_title'].append('N/A')
-        compensation_detail['second_employee_compensation'].append('N/A')
-        compensation_detail['third_employee_name'].append('N/A')
-        compensation_detail['third_employee_title'].append('N/A')
-        compensation_detail['third_employee_compensation'].append('N/A')
-
-
-# %%
-# debugging
-#comp_table = soup2.select_one('table.employees tbody')
-#print("✅ Compensation table found!" if comp_table else "❌ Compensation table NOT found!")
-# %%
-
-
-# %%
-#If need to check the data
-#organization_detail
-#compensation_detail
-# %%
-#Was having techinical issues with lengths of lists
-for key, value in organization_detail.items():
-    print(f"{key}: {len(value)}")
-
-for key, value in compensation_detail.items():
-    print(f"{key}: {len(value)}")
-# %%
-dataFrame = pd.DataFrame(organization_detail)
-dataFrame
+            org_row, comp_row = future.result()
+            org_results.append(org_row)
+            comp_results.append(comp_row)
+            print(f"✅ Fetched and processed EIN: {ein}")
+        except Exception as e:
+            print(f"❌ Error processing EIN {ein}: {e}")
 
 # %%
 
-compensation_df = pd.DataFrame(compensation_detail)
-compensation_df
-#There are some issues with the data collected
-#i intend on cleaning it in Python
-#However, I want to demonstrate that I can load it into Postgres so I will do it in the following lines of code
-# %%
+# Convert results to DataFrames
+org_df = pd.DataFrame(org_results)
+comp_df = pd.DataFrame(comp_results)
 
-
-
-# ✅ Define table name and schema (optional)
-table_name = 'nonprofit_financials'
-comp_table = 'org_comp'
-schema_name = 'raw'  # change this if you're using a custom schema
-
-# ✅ Check if the table already exists``
-
-# ✅ Send DataFrame to Postgres
-dataFrame.to_sql(
-    name=table_name,
+# Save to Postgres
+org_df.to_sql(
+    name='nonprofit_financials',
     con=pg_engine,
-    schema=schema_name,
-    if_exists='replace',  # or 'append' if you're adding to an existing table
-    index=False
+    schema='raw',
+    if_exists='replace',
+    index=False,
+    chunksize=500,
+    method='multi'
 )
-print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
+print("✅ Organization data saved to raw.nonprofit_financials")
 
-compensation_df.to_sql(
-    name=comp_table,
+comp_df.to_sql(
+    name='org_comp',
     con=pg_engine,
-    schema=schema_name,
-    if_exists='replace',  # or 'append' if you're adding to an existing table
-    index=False
+    schema='raw',
+    if_exists='replace',
+    index=False,
+    chunksize=500,
+    method='multi'
 )
-
-print(f"✅ DataFrame successfully loaded into table '{schema_name}.{comp_table}'")
+print("✅ Compensation data saved to raw.org_comp")
 
 
 # %%

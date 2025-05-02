@@ -84,6 +84,10 @@ financials_cleaned = raw_financial_df.copy()
 
 financials_cleaned['ein'] = financials_cleaned['ein'].astype(str).str.zfill(9)
 financials_cleaned['year'] = financials_cleaned['year'].astype('Int64')
+financials_cleaned['date_year'] = pd.to_datetime(
+    financials_cleaned['year'].astype(str) + '-01-01',
+    errors='coerce'
+)
 financials_cleaned['totrevenue'] = pd.to_numeric(financials_cleaned['totrevenue'], errors='coerce').fillna(0)
 financials_cleaned['totfuncexpns'] = pd.to_numeric(financials_cleaned['totfuncexpns'], errors='coerce').fillna(0)
 financials_cleaned['totassetsend'] = pd.to_numeric(financials_cleaned['totassetsend'], errors='coerce').fillna(0)
