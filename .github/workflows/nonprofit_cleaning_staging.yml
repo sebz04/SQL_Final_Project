@@ -1,8 +1,9 @@
-name: Nonprofit Cleaning and Staging Pipeline
+name: Clean NonProfit Data and Load to Staging Schema
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 1 * *'  # Run at 2:00 AM UTC on the 1st of every month
+  workflow_dispatch:      # optional manual trigger
 
 env:
   PG_USER: ${{ secrets.PG_USER }}

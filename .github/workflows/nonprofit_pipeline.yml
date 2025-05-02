@@ -1,9 +1,9 @@
-name: Run Nonprofit Extract and Load to Raw Schema
+name: Run Nonprofit Extract and Load to Raw Schemas
 
 on:
-    schedule:
-       - cron: '0 0 * * *
-
+  schedule:
+    - cron: '0 0 1 * *'  # At 00:00 on the 1st day of each month
+  workflow_dispatch:      # Optional: allows manual triggering
 
 env:
   PG_USER: ${{ secrets.PG_USER }}
@@ -31,9 +31,9 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run ProPublica API Extraction
-      run: |
+      run: | 
         python scripts/propublica_api_extract.py
 
     - name: Run Web Scraping Extraction
-      run: |
+      run: | 
         python scripts/web_scraping_extract.py
