@@ -100,6 +100,9 @@ for col in ['first_employee_compensation', 'second_employee_compensation', 'thir
         errors='coerce'
     )
 
+for col in ['first_employee_compensation', 'second_employee_compensation', 'third_employee_compensation']:
+    comp_cleaned[col] = comp_cleaned[col].fillna(0)
+
 # ✅ Add flag: does this org have at least one named employee?
 comp_cleaned['has_employee'] = comp_cleaned['first_employee_name'].notna()
 comp_cleaned['cleaned_at'] = datetime.now()
@@ -118,3 +121,4 @@ comp_cleaned.to_sql(
 )
 
 print(f"✅ Cleaned executive compensation data written to staging.staging_org_comp")
+# %%
