@@ -1,24 +1,13 @@
 
+#Notebook designed to extract data from csv
+
 # %% 
-''' 
-Writing steps down to extract data from ProPublica API and load it into a raw data folder.
-1. Import necessary libraries
-*** NO NEED FOR Authorization code for this API ***
-2. Define the API endpoint and parameters
-3. Make a GET request to the API
-4. Parse the JSON response
-5. Print the organization details
-6. Organize the data into a DataFrame
-'''
-
-
+# Download Dependencies
+#!pip install mysqlclient
+#!pip install python-dotenv psycopg2-binary
+#!pip install geopy
+# Uncomment when directly running it. Allows GitHub action to download through requriements.txt
 from sqlalchemy import create_engine
-!pip install mysqlclient
-!pip install python-dotenv psycopg2-binary
-!pip install geopy
-
-
-# %% 
 import requests  # Library to make HTTP requests (e.g., to access APIs)
 import json  # Module to work with JSON data (parsing and formatting)
 import pandas as pd  # Used for data manipulation and analysis
@@ -27,160 +16,22 @@ import os
 from dotenv import load_dotenv
 import psycopg2
 from urllib.parse import urlencode
-from geopy.geocoders import Nominatim
 import time  # To be polite and not overload Nominatim
-import re #Regular expressions --> when cleaning addresses, make it easier 
-
 
 # %%
+# Get CSV Data along w
 
-geolocator = Nominatim(user_agent="nonprofit_geocode")  
-# uses API to get lat/long for each organization like BeautifulSoup 
-
-#Geocode function to get latitude and longitude from address
-def get_lat_lon(address, city, state, zipcode, is_po_box=False):
-    if is_po_box:
-        #if address is a PO Box, we need to use the zipcode and city
-        query = f"{zipcode}, {city}, {state}"
-    else:
-        query = f"{address}, {city}, {state}, {zipcode}"
-    
-    try:
-        location = geolocator.geocode(query)
-        if location:
-            return location.latitude, location.longitude
-        else:
-            return None, None
-    except Exception as e:
-        print(f"Error geocoding address {query}: {e}")
-        return None, None
-    
-def clean_address(address):
-    """
-    Cleans nonprofit address for better geocoding:
-    - Removes suite, floor, apartment, unit numbers
-    - If PO BOX is detected, keeps only ZIP code later
-    """
-    if not address:
-        return ''
-
-    address = address.upper()
-
-    # Handle P.O. Box case separately
-    if 'PO BOX' in address:
-        return address.split('PO BOX')[0].strip()
-
-    # Remove common suite/unit/floor notations
-    address = re.sub(r'\s+(STE|SUITE|UNIT|FLOOR|FL|APT|APARTMENT|BLDG)\s+\d+[A-Z]*', '', address)
-    address = re.sub(r'\s+\d+(ST|ND|RD|TH)\s+FLOOR', '', address)  # Handle things like "49TH FLOOR"
-
-    # Remove extra spaces that may appear after cleaning
-    address = re.sub(r'\s+', ' ', address).strip()
-
-    return address
+csv = pd.read_csv('../data/los_angeles_eins_202505031612.csv') # .. allows it to leave notebook towards data folder
+csv
 # %%
-
-
-# -- GOING through each ntee id -- 
-# ----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-#----------------------------------------------------------------
-
-
-
-search_url = 'https://projects.propublica.org/nonprofits/api/v2'
-get_method = '/search.json?'
-get_org_method = '/organizations/'
+# Get EINS from CSV
+ein_list = csv['EIN'].dropna().astype(str).str.zfill(9).tolist()
+print(ein_list[:5])
+# %%
+# Fake EIN list to test
+ein_2 = ein_list[:5]
 
 # %%
-# Go through each ntee id 
-c_code_list = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '23', '25', '26', '27', '28', '92']	
-
-ntee_list = list(range(1, 11))  # NTEE major groups: 1–10
-
-ein_set = set()  # Use a set to avoid duplicates
-    
-
-    # Loop through up to 400 pages (25 results per page = 10,000 total)
-    #for page in range(400):
-for c_c in c_code_list:
-    print(f"\n🔍 Searching for c_code: {c_c}")
-
-    # If c_code is 3 (501(c)(3)), break it down further by NTEE
-    if c_c == '3':
-        for ntee in ntee_list:
-            print(f"  ➤ NTEE batch: {ntee}")
-            for page in range(4):  # Use range(400) if you're doing full batch
-                params = {
-                    'q': 'Los Angeles',
-                    'state[id]': 'CA',
-                    'c_code[id]': c_c,
-                    'ntee[id]': ntee,
-                    'page': page
-                }
-                query_string = urlencode(params)
-                response = requests.get(f'{search_url}{get_method}{query_string}')
-                
-                if response.status_code != 200:
-                    print(f'    ⚠️ Stopped at page {page} due to error: {response.status_code}')
-                    break
-
-                data = response.json()
-                orgs = data.get('organizations', [])
-
-                if not orgs:
-                    print(f'    ℹ️ No more results on page {page}. Ending loop.')
-                    break
-
-                for org in orgs:
-                    if org.get('city', '').lower() == 'los angeles':
-                        ein_set.add(org['ein'])
-
-                print(f'    ✅ EINs collected so far: {len(ein_set)}')
-    else:
-        # For all other c_codes, normal loop
-        for page in range(3):
-            params = {
-                'q': 'Los Angeles',
-                'state[id]': 'CA',
-                'c_code[id]': c_c,
-                'page': page
-            }
-            query_string = urlencode(params)
-            response = requests.get(f'{search_url}{get_method}{query_string}')
-
-            if response.status_code != 200:
-                print(f'  ⚠️ Stopped at page {page} due to error: {response.status_code}')
-                break
-
-            data = response.json()
-            orgs = data.get('organizations', [])
-
-            if not orgs:
-                print(f'  ℹ️ No more results on page {page}. Ending loop.')
-                break
-
-            for org in orgs:
-                if org.get('city', '').lower() == 'los angeles':
-                    ein_set.add(org['ein'])
-
-            print(f'  ✅ EINs collected so far: {len(ein_set)}')
-# %%
-ein_list = list(ein_set)  # Convert set to list for easier handling
-print(f"✅ Total EINs collected: {len(ein_list)}")
-print(ein_list[:5])  # Print first 5 EINs to see if came out good
-
-# %%
-# Now that I have the EINs of organizations in Los Angeles,
-# I can use the EINs to get more information about each organization
-#ein_list = [952366826, 352215082, 472331261, 956047153]
 
 
 organization_info = {
@@ -257,66 +108,70 @@ subseccd_lookup = {
     '92': 'Nonexempt Charitable Trusts (4947(a)(1))'
 }
 
+# ----- COPY START ----
 
 # Step 3: Make a GET request to the API for each EIN
 
-for ein in ein_list:
-    print(f'Fetching data for EIN: {ein}')
-    response2 = requests.get(f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein}.json')
-    data2 = response2.json()
-    print(data2)
-    print("---------")
-    organization_info['ein'].append(data2['organization']['ein'])
-    organization_info['name'].append(data2['organization']['name']) 
-    organization_info['address'].append(data2['organization']['address'])
-    organization_info['city'].append(data2['organization']['city'])
-    organization_info['state'].append(data2['organization']['state'])
-    raw_zip = data2['organization'].get('zipcode', '')
-    clean_zip = str(raw_zip)[:5] if raw_zip else '00000'
-    organization_info['zipcode'].append(clean_zip)
-    # original zip code --> organization_info['zipcode'].append(data2['organization']['zipcode'])
-    # original subseccd code --> organization_info['subseccd'].append(data2['organization']['subsection_code'])
-    subseccd = str(data2['organization']['subsection_code'])  # make sure it's a string
-    organization_info['subseccd'].append(subseccd)
-    # looking up the meaning
-    organization_info['subseccd_category'].append(subseccd_lookup.get(subseccd, 'Unknown'))
-    ntee_code = data2['organization'].get('ntee_code', '')
-    organization_info['ntee_code'].append(ntee_code)
-    ntee_major = ntee_code[0] if ntee_code else 'Z'
-    organization_info['ntee_code_major'].append(ntee_major)
-    ntee_category = ntee_lookup.get(ntee_major, 'Unknown')
-    organization_info['ntee_category'].append(ntee_category)
+import time
+import json
 
-        # Before appending address info
-    #address = data2['organization']['address']
-    #city = data2['organization']['city']
-    #state = data2['organization']['state']
-    #zipcode = clean_zip
+#for ein in ein_list:
+for ein in ein_2:
+    print(f'🔍 Fetching data for EIN: {ein}')
+    url = f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein}.json'
+    
+    try:
+        response2 = requests.get(url)
+        
+        if response2.status_code == 429:
+            print("⏳ Rate limit hit. Sleeping for 60 seconds...")
+            time.sleep(60)
+            response2 = requests.get(url)  # Retry once after delay
+        
+        if response2.status_code != 200:
+            print(f"⚠️ Skipping EIN {ein} due to status code {response2.status_code}")
+            continue
 
-    #cleaned_address = clean_address(address)
+        try:
+            data2 = response2.json()
+        except json.JSONDecodeError:
+            print(f"❌ Invalid JSON for EIN {ein}. Skipping.")
+            continue
 
-    # ✅ Check if original address had PO BOX (after cleaning)
-    #is_po_box = 'PO BOX' in address.upper()
+        print(data2)
+        print("---------")
 
-    # ✅ Then geocode
-    #lat, lon = get_lat_lon(cleaned_address, city, state, zipcode, is_po_box)
+        organization_info['ein'].append(data2['organization']['ein'])
+        organization_info['name'].append(data2['organization']['name']) 
+        organization_info['address'].append(data2['organization']['address'])
+        organization_info['city'].append(data2['organization']['city'])
+        organization_info['state'].append(data2['organization']['state'])
 
-    #organization_info['latitude'].append(lat)
-    #organization_info['longitude'].append(lon)
+        raw_zip = data2['organization'].get('zipcode', '')
+        clean_zip = str(raw_zip)[:5] if raw_zip else '00000'
+        organization_info['zipcode'].append(clean_zip)
 
-    # Add a polite delay to avoid hammering Nominatim servers
-    #time.sleep(1)
+        subseccd = str(data2['organization']['subsection_code'])
+        organization_info['subseccd'].append(subseccd)
+        organization_info['subseccd_category'].append(subseccd_lookup.get(subseccd, 'Unknown'))
+
+        ntee_code = data2['organization'].get('ntee_code', '')
+        organization_info['ntee_code'].append(ntee_code)
+        ntee_major = ntee_code[0] if ntee_code else 'Z'
+        organization_info['ntee_code_major'].append(ntee_major)
+        ntee_category = ntee_lookup.get(ntee_major, 'Unknown')
+        organization_info['ntee_category'].append(ntee_category)
+
+    except Exception as e:
+        print(f"🔥 Unexpected error for EIN {ein}: {e}")
+        continue
 
 # %%
-# Save into dataframe 
+# Create DataFrame from the organization_info dictionary
 data_frame = pd.DataFrame(organization_info)
 data_frame
-
-
-
 # %%
-# Put into Postgres server 
-
+# Necessary for Postgres data connection
 pg_user = os.environ['PG_USER']
 pg_password = os.environ['PG_PASSWORD']
 pg_host = os.environ['PG_HOST']
@@ -325,17 +180,13 @@ pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
 pg_engine = create_engine(pg_conn_str)
 
 
-
-# %% 
+# %%
 # Save the DataFrame to PostgreSQL
-# ✅ Optional: load environment variables
 load_dotenv()
 
-# ✅ Define table name and schema (optional)
 table_name = 'nonprofits'
 schema_name = 'raw'  # change this if you're using a custom schema
 
-# ✅ Send DataFrame to Postgres
 data_frame.to_sql(
     name=table_name,
     con=pg_engine,
@@ -347,6 +198,7 @@ data_frame.to_sql(
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
  
+
 # %%
 # Financials for each EIN in the first 5 organizations in Los Angeles
 
@@ -376,24 +228,32 @@ for ein in ein_list:  # First 5 EINs
             'pct_compnsatncurrofcr': filing.get('pct_compnsatncurrofcr')
         })
 
+# %%
 # Convert to DataFrame
 financials_df = pd.DataFrame(financial_data)
 f_table = 'financial_history'
-
-# Preview result
-financials_df
 # %%
 #sends info to Postgres server
+pg_engine.dispose()  # Clean up the old one (optional but clean)
+pg_engine = create_engine(pg_conn_str)
+
+# %%
 financials_df.to_sql(
     name=f_table,
     con=pg_engine,
     schema=schema_name,
-    if_exists='replace',  # or 'append' if you're adding to an existing table
+    if_exists='replace',
     index=False,
     chunksize=500,
     method='multi'
 )
 print(f"✅ DataFrame successfully loaded into table '{schema_name}.{table_name}'")
  
+
+# %%
+
+# %%
+
+# %%
 
 # %%

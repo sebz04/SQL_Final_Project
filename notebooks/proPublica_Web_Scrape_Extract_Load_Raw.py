@@ -2,9 +2,10 @@
 #2 Use EIN to inplement in url https://projects.propublica.org/nonprofits/organizations/{ein}
 #3 Use BeautifulSoup to scrape the data
 # %%
-!pip install mysqlclient
-!pip install sqlalchemy
-!pip install python-dotenv psycopg2-binary
+# Uncomment when directly running it. Allows GitHub action to download through requriements.txt
+#!pip install mysqlclient
+#!pip install sqlalchemy
+#!pip install python-dotenv psycopg2-binary
 # %%
 #import libraries
 import requests
@@ -133,6 +134,16 @@ with ThreadPoolExecutor(max_workers=10) as executor:
             print(f"❌ Error processing EIN {ein}: {e}")
 
 # %%
+
+load_dotenv()
+
+# Recreate the connection engine
+pg_user = os.environ['PG_USER']
+pg_password = os.environ['PG_PASSWORD']
+pg_host = os.environ['PG_HOST']
+pg_db = os.environ['PG_DB']
+pg_conn_str = f'postgresql+psycopg2://{pg_user}:{pg_password}@{pg_host}/{pg_db}'
+pg_engine = create_engine(pg_conn_str)
 
 # Convert results to DataFrames
 org_df = pd.DataFrame(org_results)
