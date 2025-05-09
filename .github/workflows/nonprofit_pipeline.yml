@@ -32,8 +32,8 @@ jobs:
 
     - name: Run ProPublica API Extraction
       run: | 
-        python scripts/propublica_api_extract.py
+        python notebooks/proPublica_API_Extract_Load_Raw.py
 
     - name: Run Web Scraping Extraction
       run: | 
-        python scripts/web_scraping_extract.py
+        python notebooks/proPublica_Web_Scrape_Extract_Load_Raw.py
