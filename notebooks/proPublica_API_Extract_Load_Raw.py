@@ -116,8 +116,8 @@ subseccd_lookup = {
 import time
 import json
 
-#for ein in ein_list:
-for ein in ein_2:
+for ein in ein_list:
+#for ein in ein_2:
     print(f'🔍 Fetching data for EIN: {ein}')
     url = f'https://projects.propublica.org/nonprofits/api/v2/organizations/{ein}.json'
     
