@@ -32,7 +32,7 @@ jobs:
 
     - name: Run ProPublica API Extraction
       run: | 
-        cd notebooks && python notebooks/proPublica_API_Extract_Load_Raw.py
+        python notebooks/proPublica_API_Extract_Load_Raw.py
 
     - name: Run Web Scraping Extraction
       run: | 

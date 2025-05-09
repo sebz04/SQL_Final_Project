@@ -20,8 +20,9 @@ import time  # To be polite and not overload Nominatim
 
 # %%
 # Get CSV Data along w
-
-csv = pd.read_csv('../data/los_angeles_eins_202505031612.csv') # .. allows it to leave notebook towards data folder
+csv = pd.read_csv('data/los_angeles_eins_202505031612.csv')
+#****uncomment underneath if manually running script ****
+#csv = pd.read_csv('../data/los_angeles_eins_202505031612.csv') # .. allows it to leave notebook towards data folder
 csv
 # %%
 # Get EINS from CSV
