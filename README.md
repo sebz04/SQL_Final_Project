@@ -57,5 +57,6 @@ ZIP code analysis reveals geographic disparities in revenue, spending, and asset
 ***Author***
 
 Sebastian Zapata-Ochoa
+
 Undergraduate Student – Information Systems and Business Analytics & Journalism
 
